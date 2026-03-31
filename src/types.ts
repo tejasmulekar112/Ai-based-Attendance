@@ -12,4 +12,5 @@ export interface AttendanceRecord {
   userName: string;
   timestamp: string;
   status: 'present' | 'absent';
+  confidence?: number;
 }

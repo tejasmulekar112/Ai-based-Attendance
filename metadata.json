@@ -1,5 +1,5 @@
 {
-  "name": "FaceTrack Attendance",
+  "name": "AI Based Attendance",
   "description": "A smart face recognition attendance system for schools and workplaces.",
   "requestFramePermissions": ["camera"]
 }

@@ -11,12 +11,22 @@ export const loadModels = async () => {
 };
 
 export const getFaceDescriptor = async (image: HTMLVideoElement | HTMLImageElement) => {
-  const detection = await faceapi
-    .detectSingleFace(image, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.5 }))
-    .withFaceLandmarks()
-    .withFaceDescriptor();
-  
-  return detection?.descriptor;
+  try {
+    // Ensure video is ready if it's a video element
+    if (image instanceof HTMLVideoElement && (image.paused || image.ended)) {
+      return null;
+    }
+
+    const detection = await faceapi
+      .detectSingleFace(image, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }))
+      .withFaceLandmarks()
+      .withFaceDescriptor();
+    
+    return detection?.descriptor;
+  } catch (error) {
+    console.error('Face detection error:', error);
+    return null;
+  }
 };
 
 export const compareFaces = (descriptor1: Float32Array, descriptor2: Float32Array) => {
