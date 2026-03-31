@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Camera, UserPlus, ClipboardList, CheckCircle2, AlertCircle, Loader2, Download } from 'lucide-react';
+import { Camera, UserPlus, ClipboardList, CheckCircle2, AlertCircle, Loader2, Download, Sun, Moon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { loadModels, getFaceDescriptor } from './lib/faceApi';
 import { User, AttendanceRecord } from './types';
@@ -22,8 +22,23 @@ export default function App() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isAbsenceDialogOpen, setIsAbsenceDialogOpen] = useState(false);
   const [selectedUserForAbsence, setSelectedUserForAbsence] = useState<string>('');
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    if (typeof window !== 'undefined') {
+      return (localStorage.getItem('theme') as 'light' | 'dark') || 'dark';
+    }
+    return 'dark';
+  });
 
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    localStorage.setItem('theme', theme);
+  }, [theme]);
 
   useEffect(() => {
     window.addEventListener('beforeinstallprompt', (e) => {
@@ -340,29 +355,53 @@ export default function App() {
 
   if (!isModelsLoaded) {
     return (
-      <div className="min-h-screen bg-[#0a0a0a] flex flex-col items-center justify-center text-white font-sans">
+      <div className={`min-h-screen flex flex-col items-center justify-center font-sans transition-colors duration-300 ${
+        theme === 'dark' ? 'bg-[#0a0a0a] text-white' : 'bg-zinc-50 text-black'
+      }`}>
         <Loader2 className="w-12 h-12 animate-spin text-orange-500 mb-4" />
         <h1 className="text-2xl font-light tracking-widest uppercase">Initializing AI Models</h1>
-        <p className="text-zinc-500 mt-2">Loading face recognition system...</p>
+        <p className={`${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'} mt-2`}>Loading face recognition system...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white font-sans selection:bg-orange-500/30">
+    <div className={`min-h-screen font-sans selection:bg-orange-500/30 transition-colors duration-300 ${
+      theme === 'dark' ? 'bg-[#0a0a0a] text-white' : 'bg-white text-zinc-900'
+    }`}>
       {/* Header */}
-      <header className="border-b border-zinc-800/50 p-6 flex justify-between items-center backdrop-blur-xl sticky top-0 z-50">
+      <header className={`border-b p-6 flex justify-between items-center backdrop-blur-xl sticky top-0 z-50 transition-colors duration-300 ${
+        theme === 'dark' ? 'border-zinc-800/50 bg-[#0a0a0a]/80' : 'border-zinc-200 bg-white/80'
+      }`}>
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-orange-500 rounded-full flex items-center justify-center shadow-lg shadow-orange-500/20">
             <Camera className="text-black w-6 h-6" />
           </div>
           <div>
             <h1 className="text-xl font-semibold tracking-tight">AI Attendance</h1>
-            <p className="text-[10px] text-zinc-500 uppercase tracking-[0.2em]">Smart System</p>
+            <p className={`text-[10px] uppercase tracking-[0.2em] ${
+              theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'
+            }`}>Smart System</p>
           </div>
         </div>
         
-        <nav className="flex gap-1 bg-zinc-900/50 p-1 rounded-full border border-zinc-800">
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            className={`p-2 rounded-full transition-all ${
+              theme === 'dark' 
+                ? 'bg-zinc-800 text-yellow-400 hover:bg-zinc-700' 
+                : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+            }`}
+            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+          >
+            {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+          </button>
+        </div>
+
+        <nav className={`flex gap-1 p-1 rounded-full border transition-colors duration-300 ${
+          theme === 'dark' ? 'bg-zinc-900/50 border-zinc-800' : 'bg-zinc-100 border-zinc-200'
+        }`}>
           {deferredPrompt && (
             <button
               onClick={handleInstallClick}
@@ -382,7 +421,9 @@ export default function App() {
               className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
                 activeTab === tab.id 
                   ? 'bg-orange-500 text-black shadow-lg shadow-orange-500/20' 
-                  : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+                  : theme === 'dark'
+                    ? 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+                    : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200'
               }`}
             >
               <tab.icon className="w-4 h-4" />
@@ -404,15 +445,21 @@ export default function App() {
             >
               <div className="space-y-8">
                 <div className="space-y-4">
-                  <h2 className="text-5xl font-bold tracking-tighter leading-none">
+                  <h2 className={`text-5xl font-bold tracking-tighter leading-none ${
+                    theme === 'dark' ? 'text-white' : 'text-zinc-900'
+                  }`}>
                     Mark Your <span className="text-orange-500">Attendance</span>
                   </h2>
-                  <p className="text-zinc-400 text-lg max-w-md">
+                  <p className={`text-lg max-w-md ${
+                    theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'
+                  }`}>
                     Position your face in front of the camera to automatically log your attendance.
                   </p>
                 </div>
 
-                <div className="relative aspect-[4/3] md:aspect-video bg-zinc-900 rounded-3xl overflow-hidden border border-zinc-800 shadow-2xl">
+                <div className={`relative aspect-[4/3] md:aspect-video rounded-3xl overflow-hidden border shadow-2xl transition-colors duration-300 ${
+                  theme === 'dark' ? 'bg-zinc-900 border-zinc-800' : 'bg-zinc-100 border-zinc-200'
+                }`}>
                   {cameraError ? (
                     <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center bg-zinc-950/80 backdrop-blur-sm z-10">
                       <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
@@ -457,7 +504,11 @@ export default function App() {
                 <button
                   onClick={handleAttendance}
                   disabled={isScanning || users.length === 0}
-                  className="w-full py-6 bg-white text-black rounded-3xl font-bold text-xl hover:bg-orange-500 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+                  className={`w-full py-6 rounded-3xl font-bold text-xl transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 ${
+                    theme === 'dark' 
+                      ? 'bg-white text-black hover:bg-orange-500' 
+                      : 'bg-zinc-900 text-white hover:bg-orange-500'
+                  }`}
                 >
                   {isScanning ? (
                     <>
@@ -514,12 +565,16 @@ export default function App() {
               className="max-w-2xl mx-auto space-y-12"
             >
               <div className="text-center space-y-4">
-                <h2 className="text-5xl font-bold tracking-tighter">New <span className="text-orange-500">Registration</span></h2>
-                <p className="text-zinc-400">Add a new user to the system by capturing their face.</p>
+                <h2 className={`text-5xl font-bold tracking-tighter ${
+                  theme === 'dark' ? 'text-white' : 'text-zinc-900'
+                }`}>New <span className="text-orange-500">Registration</span></h2>
+                <p className={theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}>Add a new user to the system by capturing their face.</p>
               </div>
 
               <div className="space-y-6">
-                <div className="relative aspect-[4/3] md:aspect-video bg-zinc-900 rounded-3xl overflow-hidden border border-zinc-800">
+                <div className={`relative aspect-[4/3] md:aspect-video rounded-3xl overflow-hidden border transition-colors duration-300 ${
+                  theme === 'dark' ? 'bg-zinc-900 border-zinc-800' : 'bg-zinc-100 border-zinc-200'
+                }`}>
                   {cameraError ? (
                     <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center bg-zinc-950/80 backdrop-blur-sm z-10">
                       <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
@@ -552,12 +607,20 @@ export default function App() {
                     placeholder="Enter Full Name"
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-6 py-4 text-lg focus:outline-none focus:border-orange-500 transition-colors"
+                    className={`w-full border rounded-2xl px-6 py-4 text-lg focus:outline-none focus:border-orange-500 transition-colors ${
+                      theme === 'dark' 
+                        ? 'bg-zinc-900 border-zinc-800 text-white placeholder:text-zinc-600' 
+                        : 'bg-zinc-50 border-zinc-200 text-zinc-900 placeholder:text-zinc-400'
+                    }`}
                   />
                   <button
                     onClick={handleRegister}
                     disabled={!newName || isRegistering}
-                    className="w-full py-6 bg-orange-500 text-black rounded-3xl font-bold text-xl hover:bg-white transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-3"
+                    className={`w-full py-6 rounded-3xl font-bold text-xl transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-3 ${
+                      theme === 'dark' 
+                        ? 'bg-orange-500 text-black hover:bg-white' 
+                        : 'bg-zinc-900 text-white hover:bg-orange-500'
+                    }`}
                   >
                     {isRegistering ? (
                       <>
@@ -599,8 +662,10 @@ export default function App() {
             >
               <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
                 <div className="space-y-2">
-                  <h2 className="text-4xl font-bold tracking-tighter">Attendance <span className="text-orange-500">Logs</span></h2>
-                  <p className="text-zinc-500">Detailed history of all attendance scans.</p>
+                  <h2 className={`text-4xl font-bold tracking-tighter ${
+                    theme === 'dark' ? 'text-white' : 'text-zinc-900'
+                  }`}>Attendance <span className="text-orange-500">Logs</span></h2>
+                  <p className={theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'}>Detailed history of all attendance scans.</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-4">
                   <button 
@@ -610,16 +675,26 @@ export default function App() {
                     <Download className="w-4 h-4" />
                     Export CSV
                   </button>
-                  <div className="flex items-center gap-4 bg-zinc-900/50 p-1 rounded-2xl border border-zinc-800">
+                  <div className={`flex items-center gap-4 p-1 rounded-2xl border transition-colors duration-300 ${
+                    theme === 'dark' ? 'bg-zinc-900/50 border-zinc-800' : 'bg-zinc-100 border-zinc-200'
+                  }`}>
                     <button 
                       onClick={() => setHistoryView('logs')}
-                      className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${historyView === 'logs' ? 'bg-white text-black' : 'text-zinc-500 hover:text-white'}`}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${
+                        historyView === 'logs' 
+                          ? theme === 'dark' ? 'bg-white text-black' : 'bg-zinc-900 text-white'
+                          : theme === 'dark' ? 'text-zinc-500 hover:text-white' : 'text-zinc-500 hover:text-zinc-900'
+                      }`}
                     >
                       All Logs
                     </button>
                     <button 
                       onClick={() => setHistoryView('summary')}
-                      className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${historyView === 'summary' ? 'bg-white text-black' : 'text-zinc-500 hover:text-white'}`}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${
+                        historyView === 'summary' 
+                          ? theme === 'dark' ? 'bg-white text-black' : 'bg-zinc-900 text-white'
+                          : theme === 'dark' ? 'text-zinc-500 hover:text-white' : 'text-zinc-500 hover:text-zinc-900'
+                      }`}
                     >
                       Daily Summary
                     </button>
@@ -637,10 +712,14 @@ export default function App() {
                       Clear All Logs
                     </button>
                   </div>
-                  <div className="bg-zinc-900/30 border border-zinc-800 rounded-3xl overflow-hidden">
+                  <div className={`border rounded-3xl overflow-hidden transition-colors duration-300 ${
+                    theme === 'dark' ? 'bg-zinc-900/30 border-zinc-800' : 'bg-white border-zinc-200 shadow-sm'
+                  }`}>
                     <table className="w-full text-left border-collapse">
                       <thead>
-                        <tr className="border-b border-zinc-800 bg-zinc-900/50">
+                        <tr className={`border-b transition-colors duration-300 ${
+                          theme === 'dark' ? 'border-zinc-800 bg-zinc-900/50' : 'border-zinc-200 bg-zinc-50'
+                        }`}>
                           <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-widest">User</th>
                           <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-widest">Date</th>
                           <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-widest">Time</th>
@@ -648,21 +727,27 @@ export default function App() {
                           <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-widest text-right">Status</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-zinc-800/50">
+                      <tbody className={`divide-y transition-colors duration-300 ${
+                        theme === 'dark' ? 'divide-zinc-800/50' : 'divide-zinc-100'
+                      }`}>
                         {attendance.map((record) => (
-                          <tr key={record.id} className="hover:bg-zinc-800/20 transition-colors">
+                          <tr key={record.id} className={`transition-colors ${
+                            theme === 'dark' ? 'hover:bg-zinc-800/20' : 'hover:bg-zinc-50'
+                          }`}>
                             <td className="px-6 py-4">
                               <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 bg-zinc-800 rounded-full flex items-center justify-center text-[10px] font-bold">
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                                  theme === 'dark' ? 'bg-zinc-800' : 'bg-zinc-100'
+                                }`}>
                                   {record.userName[0]}
                                 </div>
-                                <span className="font-medium">{record.userName}</span>
+                                <span className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-zinc-900'}`}>{record.userName}</span>
                               </div>
                             </td>
-                            <td className="px-6 py-4 text-zinc-400">
+                            <td className={theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}>
                               {format(new Date(record.timestamp), 'MMM dd, yyyy')}
                             </td>
-                            <td className="px-6 py-4 text-zinc-400">
+                            <td className={theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}>
                               {format(new Date(record.timestamp), 'hh:mm:ss a')}
                             </td>
                             <td className="px-6 py-4">
@@ -703,13 +788,21 @@ export default function App() {
                     <div className="flex gap-2">
                       <button 
                         onClick={() => setIsAbsenceDialogOpen(true)}
-                        className="px-4 py-2 bg-zinc-800 hover:bg-orange-500/20 hover:text-orange-500 text-zinc-400 rounded-xl text-xs font-bold uppercase tracking-widest border border-zinc-700 transition-all"
+                        className={`px-4 py-2 border rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${
+                          theme === 'dark' 
+                            ? 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:bg-orange-500/20 hover:text-orange-500' 
+                            : 'bg-zinc-100 border-zinc-200 text-zinc-600 hover:bg-orange-500/10 hover:text-orange-500'
+                        }`}
                       >
                         Mark User Absent
                       </button>
                       <button 
                         onClick={markAbsents}
-                        className="px-4 py-2 bg-zinc-800 hover:bg-red-500/20 hover:text-red-500 text-zinc-400 rounded-xl text-xs font-bold uppercase tracking-widest border border-zinc-700 transition-all"
+                        className={`px-4 py-2 border rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${
+                          theme === 'dark' 
+                            ? 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:bg-red-500/20 hover:text-red-500' 
+                            : 'bg-zinc-100 border-zinc-200 text-zinc-600 hover:bg-red-500/10 hover:text-red-500'
+                        }`}
                       >
                         Mark Unscanned as Absent
                       </button>
@@ -717,14 +810,18 @@ export default function App() {
                   </div>
                   <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {getDailySummary().map((user) => (
-                      <div key={user.id} className="bg-zinc-900/50 border border-zinc-800 p-6 rounded-3xl flex items-center justify-between">
+                      <div key={user.id} className={`p-6 rounded-3xl flex items-center justify-between border transition-colors duration-300 ${
+                        theme === 'dark' ? 'bg-zinc-900/50 border-zinc-800' : 'bg-white border-zinc-200 shadow-sm'
+                      }`}>
                         <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 bg-zinc-800 rounded-2xl flex items-center justify-center text-orange-500 font-bold text-xl">
+                          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-orange-500 font-bold text-xl ${
+                            theme === 'dark' ? 'bg-zinc-800' : 'bg-zinc-100'
+                          }`}>
                             {user.name[0]}
                           </div>
                           <div>
-                            <p className="font-bold">{user.name}</p>
-                            <p className="text-xs text-zinc-500">Registered {format(new Date(user.createdAt), 'MMM dd')}</p>
+                            <p className={`font-bold ${theme === 'dark' ? 'text-white' : 'text-zinc-900'}`}>{user.name}</p>
+                            <p className={`text-xs ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'}`}>Registered {format(new Date(user.createdAt), 'MMM dd')}</p>
                           </div>
                         </div>
                         <span className={`text-[10px] px-2 py-1 rounded-full border uppercase font-bold tracking-wider ${
@@ -766,13 +863,15 @@ export default function App() {
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-3xl p-8 shadow-2xl"
+              className={`relative w-full max-w-md p-8 rounded-3xl border shadow-2xl transition-colors duration-300 ${
+                theme === 'dark' ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'
+              }`}
             >
               <div className="flex items-center gap-3 mb-6">
                 <div className="w-10 h-10 bg-orange-500/10 rounded-full flex items-center justify-center">
                   <AlertCircle className="text-orange-500 w-6 h-6" />
                 </div>
-                <h3 className="text-xl font-bold">Mark Manual Absence</h3>
+                <h3 className={`text-xl font-bold ${theme === 'dark' ? 'text-white' : 'text-zinc-900'}`}>Mark Manual Absence</h3>
               </div>
               
               <div className="space-y-6">
@@ -781,7 +880,9 @@ export default function App() {
                   <select 
                     value={selectedUserForAbsence}
                     onChange={(e) => setSelectedUserForAbsence(e.target.value)}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-orange-500 transition-colors"
+                    className={`w-full border rounded-xl px-4 py-3 focus:outline-none focus:border-orange-500 transition-colors ${
+                      theme === 'dark' ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-zinc-50 border-zinc-200 text-zinc-900'
+                    }`}
                   >
                     <option value="">Choose a user...</option>
                     {users.map(user => (
@@ -793,7 +894,9 @@ export default function App() {
                 <div className="flex gap-3">
                   <button 
                     onClick={() => setIsAbsenceDialogOpen(false)}
-                    className="flex-1 py-3 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl font-bold transition-all"
+                    className={`flex-1 py-3 rounded-xl font-bold transition-all ${
+                      theme === 'dark' ? 'bg-zinc-800 hover:bg-zinc-700 text-white' : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-600'
+                    }`}
                   >
                     Cancel
                   </button>
@@ -812,15 +915,17 @@ export default function App() {
       </AnimatePresence>
 
       {/* Footer */}
-      <footer className="max-w-6xl mx-auto p-12 border-t border-zinc-800/50 mt-12 flex flex-col md:flex-row justify-between items-center gap-6 text-zinc-600 text-sm">
+      <footer className={`max-w-6xl mx-auto p-12 border-t mt-12 flex flex-col md:flex-row justify-between items-center gap-6 text-sm transition-colors duration-300 ${
+        theme === 'dark' ? 'border-zinc-800/50 text-zinc-600' : 'border-zinc-200 text-zinc-400'
+      }`}>
         <div className="flex items-center gap-2">
           <Camera className="w-4 h-4" />
           <span>FaceTrack v1.0.0</span>
         </div>
         <div className="flex gap-8">
-          <a href="#" className="hover:text-white transition-colors">Privacy Policy</a>
-          <a href="#" className="hover:text-white transition-colors">Terms of Service</a>
-          <a href="#" className="hover:text-white transition-colors">Support</a>
+          <a href="#" className={`transition-colors ${theme === 'dark' ? 'hover:text-white' : 'hover:text-zinc-900'}`}>Privacy Policy</a>
+          <a href="#" className={`transition-colors ${theme === 'dark' ? 'hover:text-white' : 'hover:text-zinc-900'}`}>Terms of Service</a>
+          <a href="#" className={`transition-colors ${theme === 'dark' ? 'hover:text-white' : 'hover:text-zinc-900'}`}>Support</a>
         </div>
         <p>© 2026 FaceTrack AI. All rights reserved.</p>
       </footer>
