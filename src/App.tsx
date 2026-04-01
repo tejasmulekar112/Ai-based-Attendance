@@ -106,6 +106,7 @@ The AI Attendance System successfully combines cutting-edge AI with real-time we
 
 export default function App() {
   const [isModelsLoaded, setIsModelsLoaded] = useState(false);
+  const [modelError, setModelError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'attendance' | 'register' | 'history' | 'docs'>('attendance');
   const [historyView, setHistoryView] = useState<'logs' | 'summary'>('logs');
   const [users, setUsers] = useState<User[]>([]);
@@ -158,6 +159,7 @@ export default function App() {
         setIsModelsLoaded(true);
       } catch (error) {
         console.error('Failed to load models:', error);
+        setModelError('Failed to load AI models. Please check your internet connection and refresh the page.');
       }
     };
     init();
@@ -488,9 +490,25 @@ export default function App() {
       <div className={`min-h-screen flex flex-col items-center justify-center font-sans transition-colors duration-300 ${
         theme === 'dark' ? 'bg-[#0a0a0a] text-white' : 'bg-zinc-50 text-black'
       }`}>
-        <Loader2 className="w-12 h-12 animate-spin text-orange-500 mb-4" />
-        <h1 className="text-2xl font-light tracking-widest uppercase">Initializing AI Models</h1>
-        <p className={`${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'} mt-2`}>Loading face recognition system...</p>
+        {modelError ? (
+          <div className="text-center p-8 max-w-md">
+            <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+            <h1 className="text-2xl font-bold mb-2">Initialization Error</h1>
+            <p className="text-zinc-500 mb-6">{modelError}</p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="px-6 py-2 bg-orange-500 text-white rounded-full font-bold hover:bg-orange-600 transition-all"
+            >
+              Retry
+            </button>
+          </div>
+        ) : (
+          <>
+            <Loader2 className="w-12 h-12 animate-spin text-orange-500 mb-4" />
+            <h1 className="text-2xl font-light tracking-widest uppercase">Initializing AI Models</h1>
+            <p className={`${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'} mt-2`}>Loading face recognition system...</p>
+          </>
+        )}
       </div>
     );
   }
