@@ -101,24 +101,41 @@ To make the app available on Android and iOS:
 
 ---
 
-## 7. How to Use the System
+## 7. Authentication & Role-Based Access
+The system now includes a secure login layer with two distinct roles: **Admin** and **User**.
 
-1.  **Registration:**
-    - Navigate to the **Register** tab.
-    - Enter your name.
-    - Click **Scan Face** to capture your facial features.
-2.  **Marking Attendance:**
-    - Navigate to the **Scan** tab.
-    - Ensure your face is visible in the camera.
-    - The system will automatically recognize you and mark your attendance.
-3.  **Viewing History:**
-    - Go to the **History** tab.
-    - View live logs of everyone who has scanned.
-    - Check the **Daily Summary** to see who is present or absent.
+### Roles and Permissions:
+- **Admin:**
+    - Full access to all tabs: **Scan**, **Register**, **History**, and **Docs**.
+    - Can perform administrative actions: Mark users absent, clear logs, and export data (CSV/PDF).
+    - Receives email notifications for registration and absence events.
+- **User:**
+    - Access to **Scan** and **Register** tabs.
+    - Can register new users into the system.
+    - Cannot access attendance history, documentation, or administrative tools.
 
-![User Dashboard](https://picsum.photos/seed/dashboard-ui/800/400)
+### Demo Credentials:
+- **Admin:** `admin` / `admin123`
+- **User:** `user` / `user123`
 
 ---
 
-## 8. Conclusion
+## 8. How to Use the System
+
+1.  **Sign In:**
+    - Enter your credentials on the login screen.
+2.  **Registration:**
+    - Navigate to the **Register** tab.
+    - Enter the person's name and capture their face.
+    - (Available to both Admin and User roles).
+3.  **Marking Attendance:**
+    - Navigate to the **Scan** tab.
+    - The system will automatically recognize you.
+    - **Users** can see their "Status Today" box update instantly in the Scan tab.
+4.  **Viewing Records (Admin Only):**
+    - Navigate to the **History** tab to view logs and summaries.
+
+---
+
+## 9. Conclusion
 The AI Attendance System successfully combines cutting-edge AI with real-time web technologies to provide a robust solution for modern attendance tracking. Its cross-platform nature ensures it can be used in any environment, from office desktops to mobile devices on the go.

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Camera, UserPlus, ClipboardList, CheckCircle2, AlertCircle, Loader2, Download, Sun, Moon, FileText } from 'lucide-react';
+import { Camera, UserPlus, ClipboardList, CheckCircle2, AlertCircle, Loader2, Download, Sun, Moon, FileText, LogOut } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { loadModels, getFaceDescriptor } from './lib/faceApi';
 import { User, AttendanceRecord } from './types';
@@ -107,6 +107,11 @@ The AI Attendance System successfully combines cutting-edge AI with real-time we
 export default function App() {
   const [isModelsLoaded, setIsModelsLoaded] = useState(false);
   const [modelError, setModelError] = useState<string | null>(null);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userRole, setUserRole] = useState<'admin' | 'user' | null>(null);
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'attendance' | 'register' | 'history' | 'docs'>('attendance');
   const [historyView, setHistoryView] = useState<'logs' | 'summary'>('logs');
   const [users, setUsers] = useState<User[]>([]);
@@ -115,6 +120,10 @@ export default function App() {
   const [scanResult, setScanResult] = useState<{ success: boolean; message: string } | null>(null);
   const [newName, setNewName] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
+  const [registrationStep, setRegistrationStep] = useState<'input' | 'photo'>('input');
+  const isStartingCamera = useRef(false);
+  const [tempDescriptor, setTempDescriptor] = useState<number[] | null>(null);
+  const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isAbsenceDialogOpen, setIsAbsenceDialogOpen] = useState(false);
   const [selectedUserForAbsence, setSelectedUserForAbsence] = useState<string>('');
@@ -126,6 +135,7 @@ export default function App() {
   });
 
   const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     if (theme === 'dark') {
@@ -200,52 +210,74 @@ export default function App() {
   const [cameraError, setCameraError] = useState<string | null>(null);
 
   const startCamera = async () => {
+    if (isStartingCamera.current) return;
+    isStartingCamera.current = true;
+    
     setCameraError(null);
     
     // Stop any existing tracks before starting a new one
     stopCamera();
 
-    const constraints = [
-      { 
-        video: { 
-          facingMode: 'user',
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        } 
-      },
-      { video: { facingMode: 'user' } },
-      { video: true }
-    ];
+    try {
+      // Wait a bit for the video element to be available in the DOM
+      // especially during tab transitions with AnimatePresence
+      let attempts = 0;
+      while (!videoRef.current && attempts < 20) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        attempts++;
+      }
 
-    let lastError: any = null;
+      if (!videoRef.current) {
+        console.error('Video ref not available after multiple attempts');
+        isStartingCamera.current = false;
+        return;
+      }
 
-    for (const constraint of constraints) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia(constraint);
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          return; // Success!
-        }
-      } catch (error: any) {
-        lastError = error;
-        console.warn('Camera constraint failed, trying next...', constraint, error);
-        // If it's a permission error, don't bother trying other constraints
-        if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-          break;
+      const constraints = [
+        { 
+          video: { 
+            facingMode: 'user',
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          } 
+        },
+        { video: { facingMode: 'user' } },
+        { video: true }
+      ];
+
+      let lastError: any = null;
+
+      for (const constraint of constraints) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia(constraint);
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+            isStartingCamera.current = false;
+            return; // Success!
+          }
+        } catch (error: any) {
+          lastError = error;
+          console.warn('Camera constraint failed, trying next...', constraint, error);
+          // If it's a permission error, don't bother trying other constraints
+          if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+            break;
+          }
         }
       }
-    }
 
-    // If we reach here, all attempts failed
-    if (lastError) {
-      console.error('Final camera access error:', lastError);
-      if (lastError.name === 'NotAllowedError' || lastError.name === 'PermissionDeniedError') {
-        setCameraError('Camera access was denied. Please enable camera permissions in your browser settings and refresh the page.');
-      } else if (lastError.name === 'NotReadableError' || lastError.name === 'TrackStartError') {
-        setCameraError('The camera is already in use by another application or tab. Please close other apps using the camera and try again.');
-      } else {
-        setCameraError('Could not access camera. Please ensure your camera is connected and not being used by another app.');
+      // If we reach here, all attempts failed
+      if (lastError) {
+        console.error('Final camera access error:', lastError);
+        if (lastError.name === 'NotAllowedError' || lastError.name === 'PermissionDeniedError') {
+          setCameraError('Camera access was denied. Please enable camera permissions in your browser settings and refresh the page.');
+        } else if (lastError.name === 'NotReadableError' || lastError.name === 'TrackStartError') {
+          setCameraError('The camera is already in use by another application or tab. Please close other apps using the camera and try again.');
+        } else {
+          setCameraError('Could not access camera. Please ensure your camera is connected and not being used by another app.');
+        }
       }
+    } finally {
+      isStartingCamera.current = false;
     }
   };
 
@@ -397,13 +429,20 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (activeTab === 'attendance' || activeTab === 'register') {
+    if (isModelsLoaded && (activeTab === 'attendance' || activeTab === 'register')) {
       startCamera();
     } else {
       stopCamera();
     }
+    
+    if (activeTab !== 'register') {
+      setRegistrationStep('input');
+      setTempDescriptor(null);
+      setCapturedPhoto(null);
+    }
+    
     return () => stopCamera();
-  }, [activeTab]);
+  }, [activeTab, isModelsLoaded, registrationStep]);
 
   const handleRegister = async () => {
     if (!newName || !videoRef.current) return;
@@ -416,26 +455,53 @@ export default function App() {
       
       const descriptor = await getFaceDescriptor(videoRef.current);
       if (descriptor) {
-        const newUser: User = {
-          id: crypto.randomUUID(),
-          name: newName,
-          descriptor: Array.from(descriptor),
-          createdAt: new Date().toISOString(),
-        };
-        socket.emit('register_user', newUser);
-        setNewName('');
-        setScanResult({ success: true, message: `Successfully registered ${newUser.name}` });
+        setTempDescriptor(Array.from(descriptor));
+        setRegistrationStep('photo');
       } else {
         setScanResult({ success: false, message: 'No face detected. Please ensure your face is clearly visible and try again.' });
+        setTimeout(() => setScanResult(null), 4000);
       }
     } catch (error) {
       console.error('Registration error:', error);
       setScanResult({ success: false, message: 'Registration failed. Please try again.' });
+      setTimeout(() => setScanResult(null), 4000);
     } finally {
       setIsRegistering(false);
-      // Keep success message longer, error message shorter
-      setTimeout(() => setScanResult(null), 4000);
     }
+  };
+
+  const captureProfilePhoto = () => {
+    if (!videoRef.current || !canvasRef.current) return;
+    const canvas = canvasRef.current;
+    const video = videoRef.current;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const photoData = canvas.toDataURL('image/jpeg');
+      setCapturedPhoto(photoData);
+    }
+  };
+
+  const finalizeRegistration = (withPhoto: boolean) => {
+    if (!tempDescriptor || !newName) return;
+    
+    const newUser: User = {
+      id: crypto.randomUUID(),
+      name: newName,
+      descriptor: tempDescriptor,
+      photoUrl: withPhoto && capturedPhoto ? capturedPhoto : undefined,
+      createdAt: new Date().toISOString(),
+    };
+    
+    socket.emit('register_user', newUser);
+    setNewName('');
+    setTempDescriptor(null);
+    setCapturedPhoto(null);
+    setRegistrationStep('input');
+    setScanResult({ success: true, message: `Successfully registered ${newUser.name}` });
+    setTimeout(() => setScanResult(null), 4000);
   };
 
   const handleAttendance = async () => {
@@ -485,6 +551,29 @@ export default function App() {
     }
   };
 
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (loginUsername === 'admin' && loginPassword === 'admin123') {
+      setIsLoggedIn(true);
+      setUserRole('admin');
+      setLoginError(null);
+    } else if (loginUsername === 'user' && loginPassword === 'user123') {
+      setIsLoggedIn(true);
+      setUserRole('user');
+      setActiveTab('attendance');
+      setLoginError(null);
+    } else {
+      setLoginError('Invalid username or password');
+    }
+  };
+
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+    setUserRole(null);
+    setLoginUsername('');
+    setLoginPassword('');
+  };
+
   if (!isModelsLoaded) {
     return (
       <div className={`min-h-screen flex flex-col items-center justify-center font-sans transition-colors duration-300 ${
@@ -509,6 +598,91 @@ export default function App() {
             <p className={`${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'} mt-2`}>Loading face recognition system...</p>
           </>
         )}
+      </div>
+    );
+  }
+
+  if (!isLoggedIn) {
+    return (
+      <div className={`min-h-screen flex flex-col items-center justify-center font-sans transition-colors duration-300 ${
+        theme === 'dark' ? 'bg-[#0a0a0a] text-white' : 'bg-zinc-50 text-black'
+      }`}>
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className={`w-full max-w-md p-8 rounded-3xl border shadow-2xl transition-colors duration-300 ${
+            theme === 'dark' ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'
+          }`}
+        >
+          <div className="flex flex-col items-center mb-8">
+            <div className="w-16 h-16 bg-orange-500 rounded-2xl flex items-center justify-center shadow-xl shadow-orange-500/20 mb-4">
+              <Camera className="text-black w-8 h-8" />
+            </div>
+            <h1 className="text-3xl font-bold tracking-tight">Welcome Back</h1>
+            <p className={`text-sm mt-2 ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'}`}>
+              Sign in to access the Attendance System
+            </p>
+          </div>
+
+          <form onSubmit={handleLogin} className="space-y-6">
+            <div>
+              <label className={`block text-xs font-bold uppercase tracking-widest mb-2 ${
+                theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'
+              }`}>Username</label>
+              <input
+                type="text"
+                value={loginUsername}
+                onChange={(e) => setLoginUsername(e.target.value)}
+                className={`w-full px-5 py-4 rounded-2xl border outline-none transition-all ${
+                  theme === 'dark' 
+                    ? 'bg-zinc-800 border-zinc-700 focus:border-orange-500 text-white' 
+                    : 'bg-zinc-50 border-zinc-200 focus:border-orange-500 text-zinc-900'
+                }`}
+                placeholder="Enter username"
+                required
+              />
+            </div>
+            <div>
+              <label className={`block text-xs font-bold uppercase tracking-widest mb-2 ${
+                theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'
+              }`}>Password</label>
+              <input
+                type="password"
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                className={`w-full px-5 py-4 rounded-2xl border outline-none transition-all ${
+                  theme === 'dark' 
+                    ? 'bg-zinc-800 border-zinc-700 focus:border-orange-500 text-white' 
+                    : 'bg-zinc-50 border-zinc-200 focus:border-orange-500 text-zinc-900'
+                }`}
+                placeholder="Enter password"
+                required
+              />
+            </div>
+
+            {loginError && (
+              <div className="flex items-center gap-2 p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500 text-sm">
+                <AlertCircle className="w-4 h-4" />
+                {loginError}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              className="w-full py-4 bg-orange-500 text-black font-bold rounded-2xl hover:bg-orange-600 transition-all shadow-lg shadow-orange-500/20 active:scale-[0.98]"
+            >
+              Sign In
+            </button>
+          </form>
+
+          <div className="mt-8 pt-8 border-t border-zinc-800/50 text-center">
+            <p className="text-xs text-zinc-500">
+              Demo Credentials:<br />
+              Admin: <span className="text-orange-500">admin / admin123</span><br />
+              User: <span className="text-orange-500">user / user123</span>
+            </p>
+          </div>
+        </motion.div>
       </div>
     );
   }
@@ -561,9 +735,9 @@ export default function App() {
           {[
             { id: 'attendance', icon: Camera, label: 'Scan' },
             { id: 'register', icon: UserPlus, label: 'Register' },
-            { id: 'history', icon: ClipboardList, label: 'History' },
-            { id: 'docs', icon: FileText, label: 'Docs' },
-          ].map((tab) => (
+            { id: 'history', icon: ClipboardList, label: 'History', adminOnly: true },
+            { id: 'docs', icon: FileText, label: 'Docs', adminOnly: true },
+          ].filter(tab => !tab.adminOnly || userRole === 'admin').map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
@@ -579,6 +753,19 @@ export default function App() {
               <span className="hidden sm:inline">{tab.label}</span>
             </button>
           ))}
+          <div className={`w-px h-6 my-auto mx-1 ${theme === 'dark' ? 'bg-zinc-800' : 'bg-zinc-200'}`} />
+          <button
+            onClick={handleLogout}
+            className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
+              theme === 'dark'
+                ? 'text-red-400 hover:text-red-300 hover:bg-red-500/10'
+                : 'text-red-600 hover:text-red-700 hover:bg-red-50'
+            }`}
+            title="Logout"
+          >
+            <LogOut className="w-4 h-4" />
+            <span className="hidden sm:inline">Logout</span>
+          </button>
         </nav>
       </header>
 
@@ -605,6 +792,26 @@ export default function App() {
                     Position your face in front of the camera to automatically log your attendance.
                   </p>
                 </div>
+
+                {userRole === 'user' && (
+                  <div className={`p-6 rounded-3xl border transition-colors duration-300 ${
+                    theme === 'dark' ? 'bg-zinc-900/50 border-zinc-800' : 'bg-zinc-50 border-zinc-200'
+                  }`}>
+                    <h3 className="text-sm font-bold uppercase tracking-widest text-orange-500 mb-4">Your Status Today</h3>
+                    <div className="flex items-center gap-4">
+                      <div className={`w-3 h-3 rounded-full animate-pulse ${
+                        attendance.some(r => new Date(r.timestamp).toDateString() === new Date().toDateString())
+                          ? 'bg-green-500 shadow-lg shadow-green-500/50'
+                          : 'bg-yellow-500 shadow-lg shadow-yellow-500/50'
+                      }`} />
+                      <p className="text-sm font-medium">
+                        {attendance.some(r => new Date(r.timestamp).toDateString() === new Date().toDateString())
+                          ? 'Attendance Marked Successfully'
+                          : 'Attendance Pending for Today'}
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 <div className={`relative aspect-[4/3] md:aspect-video rounded-3xl overflow-hidden border shadow-2xl transition-colors duration-300 ${
                   theme === 'dark' ? 'bg-zinc-900 border-zinc-800' : 'bg-zinc-100 border-zinc-200'
@@ -682,8 +889,12 @@ export default function App() {
                   {attendance.slice(0, 5).map((record) => (
                     <div key={record.id} className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-2xl flex items-center justify-between">
                       <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 bg-zinc-800 rounded-full flex items-center justify-center text-orange-500 font-bold">
-                          {record.userName[0]}
+                        <div className="w-10 h-10 bg-zinc-800 rounded-full overflow-hidden flex items-center justify-center text-orange-500 font-bold">
+                          {users.find(u => u.id === record.userId)?.photoUrl ? (
+                            <img src={users.find(u => u.id === record.userId)?.photoUrl} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            record.userName[0]
+                          )}
                         </div>
                         <div>
                           <p className="font-medium">{record.userName}</p>
@@ -717,73 +928,143 @@ export default function App() {
                 <h2 className={`text-5xl font-bold tracking-tighter ${
                   theme === 'dark' ? 'text-white' : 'text-zinc-900'
                 }`}>New <span className="text-orange-500">Registration</span></h2>
-                <p className={theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}>Add a new user to the system by capturing their face.</p>
+                <p className={theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}>
+                  {registrationStep === 'input' 
+                    ? 'Add a new user to the system by capturing their face.' 
+                    : 'Optionally capture a profile photo for this user.'}
+                </p>
               </div>
 
               <div className="space-y-6">
-                <div className={`relative aspect-[4/3] md:aspect-video rounded-3xl overflow-hidden border transition-colors duration-300 ${
-                  theme === 'dark' ? 'bg-zinc-900 border-zinc-800' : 'bg-zinc-100 border-zinc-200'
-                }`}>
-                  {cameraError ? (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center bg-zinc-950/80 backdrop-blur-sm z-10">
-                      <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
-                      <p className="text-red-400 font-medium mb-4">{cameraError}</p>
-                      <button 
-                        onClick={startCamera}
-                        className="px-6 py-2 bg-white text-black rounded-xl font-bold hover:bg-orange-500 transition-all"
+                {registrationStep === 'input' ? (
+                  <>
+                    <div className={`relative aspect-[4/3] md:aspect-video rounded-3xl overflow-hidden border transition-colors duration-300 ${
+                      theme === 'dark' ? 'bg-zinc-900 border-zinc-800' : 'bg-zinc-100 border-zinc-200'
+                    }`}>
+                      {cameraError ? (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center bg-zinc-950/80 backdrop-blur-sm z-10">
+                          <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
+                          <p className="text-red-400 font-medium mb-4">{cameraError}</p>
+                          <button 
+                            onClick={startCamera}
+                            className="px-6 py-2 bg-white text-black rounded-xl font-bold hover:bg-orange-500 transition-all"
+                          >
+                            Try Again
+                          </button>
+                        </div>
+                      ) : (
+                        <video
+                          ref={videoRef}
+                          autoPlay
+                          muted
+                          playsInline
+                          className="w-full h-full object-cover"
+                        />
+                      )}
+                      <div className="absolute inset-0 border-[10px] md:border-[20px] border-black/20 pointer-events-none" />
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className="w-48 h-48 md:w-64 md:h-64 border-2 border-dashed border-orange-500/50 rounded-full animate-pulse" />
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <input
+                        type="text"
+                        placeholder="Enter Full Name"
+                        value={newName}
+                        onChange={(e) => setNewName(e.target.value)}
+                        className={`w-full border rounded-2xl px-6 py-4 text-lg focus:outline-none focus:border-orange-500 transition-colors ${
+                          theme === 'dark' 
+                            ? 'bg-zinc-900 border-zinc-800 text-white placeholder:text-zinc-600' 
+                            : 'bg-zinc-50 border-zinc-200 text-zinc-900 placeholder:text-zinc-400'
+                        }`}
+                      />
+                      <button
+                        onClick={handleRegister}
+                        disabled={!newName || isRegistering}
+                        className={`w-full py-6 rounded-3xl font-bold text-xl transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-3 ${
+                          theme === 'dark' 
+                            ? 'bg-orange-500 text-black hover:bg-white' 
+                            : 'bg-zinc-900 text-white hover:bg-orange-500'
+                        }`}
                       >
-                        Try Again
+                        {isRegistering ? (
+                          <>
+                            <Loader2 className="w-6 h-6 animate-spin" />
+                            Registering...
+                          </>
+                        ) : (
+                          <>
+                            <UserPlus className="w-6 h-6" />
+                            Complete Registration
+                          </>
+                        )}
                       </button>
                     </div>
-                  ) : (
-                    <video
-                      ref={videoRef}
-                      autoPlay
-                      muted
-                      playsInline
-                      className="w-full h-full object-cover"
-                    />
-                  )}
-                  <div className="absolute inset-0 border-[10px] md:border-[20px] border-black/20 pointer-events-none" />
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="w-48 h-48 md:w-64 md:h-64 border-2 border-dashed border-orange-500/50 rounded-full animate-pulse" />
-                  </div>
-                </div>
+                  </>
+                ) : (
+                  <div className="space-y-8">
+                    <div className="grid md:grid-cols-2 gap-6">
+                      <div className={`relative aspect-square rounded-3xl overflow-hidden border transition-colors duration-300 ${
+                        theme === 'dark' ? 'bg-zinc-900 border-zinc-800' : 'bg-zinc-100 border-zinc-200'
+                      }`}>
+                        <video
+                          ref={videoRef}
+                          autoPlay
+                          muted
+                          playsInline
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                          <div className="w-32 h-32 border-2 border-dashed border-orange-500/50 rounded-full" />
+                        </div>
+                        <button 
+                          onClick={captureProfilePhoto}
+                          className="absolute bottom-4 left-1/2 -translate-x-1/2 px-6 py-2 bg-orange-500 text-black rounded-full font-bold shadow-lg active:scale-95"
+                        >
+                          Capture
+                        </button>
+                      </div>
 
-                <div className="space-y-4">
-                  <input
-                    type="text"
-                    placeholder="Enter Full Name"
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    className={`w-full border rounded-2xl px-6 py-4 text-lg focus:outline-none focus:border-orange-500 transition-colors ${
-                      theme === 'dark' 
-                        ? 'bg-zinc-900 border-zinc-800 text-white placeholder:text-zinc-600' 
-                        : 'bg-zinc-50 border-zinc-200 text-zinc-900 placeholder:text-zinc-400'
-                    }`}
-                  />
-                  <button
-                    onClick={handleRegister}
-                    disabled={!newName || isRegistering}
-                    className={`w-full py-6 rounded-3xl font-bold text-xl transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-3 ${
-                      theme === 'dark' 
-                        ? 'bg-orange-500 text-black hover:bg-white' 
-                        : 'bg-zinc-900 text-white hover:bg-orange-500'
-                    }`}
-                  >
-                    {isRegistering ? (
-                      <>
-                        <Loader2 className="w-6 h-6 animate-spin" />
-                        Registering...
-                      </>
-                    ) : (
-                      <>
-                        <UserPlus className="w-6 h-6" />
-                        Complete Registration
-                      </>
-                    )}
-                  </button>
-                </div>
+                      <div className={`relative aspect-square rounded-3xl overflow-hidden border flex items-center justify-center transition-colors duration-300 ${
+                        theme === 'dark' ? 'bg-zinc-900 border-zinc-800' : 'bg-zinc-100 border-zinc-200'
+                      }`}>
+                        {capturedPhoto ? (
+                          <img src={capturedPhoto} alt="Profile Preview" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="text-center p-8">
+                            <Camera className="w-12 h-12 text-zinc-700 mx-auto mb-4" />
+                            <p className="text-zinc-500 text-sm">Preview will appear here</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-4">
+                      <button
+                        onClick={() => finalizeRegistration(true)}
+                        disabled={!capturedPhoto}
+                        className={`w-full py-6 rounded-3xl font-bold text-xl transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-3 ${
+                          theme === 'dark' 
+                            ? 'bg-orange-500 text-black hover:bg-white' 
+                            : 'bg-zinc-900 text-white hover:bg-orange-500'
+                        }`}
+                      >
+                        Save with Photo
+                      </button>
+                      <button
+                        onClick={() => finalizeRegistration(false)}
+                        className={`w-full py-4 rounded-3xl font-bold text-lg transition-all active:scale-95 ${
+                          theme === 'dark' 
+                            ? 'text-zinc-500 hover:text-white' 
+                            : 'text-zinc-500 hover:text-zinc-900'
+                        }`}
+                      >
+                        Skip Photo
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {scanResult && (
@@ -798,6 +1079,7 @@ export default function App() {
                   <span>{scanResult.message}</span>
                 </motion.div>
               )}
+              <canvas ref={canvasRef} className="hidden" />
             </motion.div>
           )}
 
@@ -817,37 +1099,43 @@ export default function App() {
                   <p className={theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'}>Detailed history of all attendance scans.</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-4">
-                  <button 
-                    onClick={exportToCSV}
-                    className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-black rounded-xl text-xs font-bold uppercase tracking-widest transition-all shadow-lg shadow-orange-500/20"
-                  >
-                    <Download className="w-4 h-4" />
-                    Export CSV
-                  </button>
-                  <button 
-                    onClick={exportToPDF}
-                    className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-black rounded-xl text-xs font-bold uppercase tracking-widest transition-all shadow-lg shadow-orange-500/20"
-                  >
-                    <Download className="w-4 h-4" />
-                    Export PDF
-                  </button>
+                  {userRole === 'admin' && (
+                    <>
+                      <button 
+                        onClick={exportToCSV}
+                        className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-black rounded-xl text-xs font-bold uppercase tracking-widest transition-all shadow-lg shadow-orange-500/20"
+                      >
+                        <Download className="w-4 h-4" />
+                        Export CSV
+                      </button>
+                      <button 
+                        onClick={exportToPDF}
+                        className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-black rounded-xl text-xs font-bold uppercase tracking-widest transition-all shadow-lg shadow-orange-500/20"
+                      >
+                        <Download className="w-4 h-4" />
+                        Export PDF
+                      </button>
+                    </>
+                  )}
                   <div className={`flex items-center gap-4 p-1 rounded-2xl border transition-colors duration-300 ${
                     theme === 'dark' ? 'bg-zinc-900/50 border-zinc-800' : 'bg-zinc-100 border-zinc-200'
                   }`}>
-                    <button 
-                      onClick={() => setHistoryView('logs')}
-                      className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${
-                        historyView === 'logs' 
-                          ? theme === 'dark' ? 'bg-white text-black' : 'bg-zinc-900 text-white'
-                          : theme === 'dark' ? 'text-zinc-500 hover:text-white' : 'text-zinc-500 hover:text-zinc-900'
-                      }`}
-                    >
-                      All Logs
-                    </button>
+                    {userRole === 'admin' && (
+                      <button 
+                        onClick={() => setHistoryView('logs')}
+                        className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${
+                          historyView === 'logs' 
+                            ? theme === 'dark' ? 'bg-white text-black' : 'bg-zinc-900 text-white'
+                            : theme === 'dark' ? 'text-zinc-500 hover:text-white' : 'text-zinc-500 hover:text-zinc-900'
+                        }`}
+                      >
+                        All Logs
+                      </button>
+                    )}
                     <button 
                       onClick={() => setHistoryView('summary')}
                       className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${
-                        historyView === 'summary' 
+                        historyView === 'summary' || userRole === 'user'
                           ? theme === 'dark' ? 'bg-white text-black' : 'bg-zinc-900 text-white'
                           : theme === 'dark' ? 'text-zinc-500 hover:text-white' : 'text-zinc-500 hover:text-zinc-900'
                       }`}
@@ -892,10 +1180,14 @@ export default function App() {
                           }`}>
                             <td className="px-6 py-4">
                               <div className="flex items-center gap-3">
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                                <div className={`w-8 h-8 rounded-full overflow-hidden flex items-center justify-center text-[10px] font-bold ${
                                   theme === 'dark' ? 'bg-zinc-800' : 'bg-zinc-100'
                                 }`}>
-                                  {record.userName[0]}
+                                  {users.find(u => u.id === record.userId)?.photoUrl ? (
+                                    <img src={users.find(u => u.id === record.userId)?.photoUrl} alt="" className="w-full h-full object-cover" />
+                                  ) : (
+                                    record.userName[0]
+                                  )}
                                 </div>
                                 <span className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-zinc-900'}`}>{record.userName}</span>
                               </div>
@@ -941,28 +1233,30 @@ export default function App() {
                 <div className="space-y-6">
                   <div className="flex justify-between items-center">
                     <h3 className="text-zinc-500 uppercase tracking-widest text-xs font-bold">Status for Today ({format(new Date(), 'MMM dd')})</h3>
-                    <div className="flex gap-2">
-                      <button 
-                        onClick={() => setIsAbsenceDialogOpen(true)}
-                        className={`px-4 py-2 border rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${
-                          theme === 'dark' 
-                            ? 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:bg-orange-500/20 hover:text-orange-500' 
-                            : 'bg-zinc-100 border-zinc-200 text-zinc-600 hover:bg-orange-500/10 hover:text-orange-500'
-                        }`}
-                      >
-                        Mark User Absent
-                      </button>
-                      <button 
-                        onClick={markAbsents}
-                        className={`px-4 py-2 border rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${
-                          theme === 'dark' 
-                            ? 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:bg-red-500/20 hover:text-red-500' 
-                            : 'bg-zinc-100 border-zinc-200 text-zinc-600 hover:bg-red-500/10 hover:text-red-500'
-                        }`}
-                      >
-                        Mark Unscanned as Absent
-                      </button>
-                    </div>
+                    {userRole === 'admin' && (
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => setIsAbsenceDialogOpen(true)}
+                          className={`px-4 py-2 border rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${
+                            theme === 'dark' 
+                              ? 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:bg-orange-500/20 hover:text-orange-500' 
+                              : 'bg-zinc-100 border-zinc-200 text-zinc-600 hover:bg-orange-500/10 hover:text-orange-500'
+                          }`}
+                        >
+                          Mark User Absent
+                        </button>
+                        <button 
+                          onClick={markAbsents}
+                          className={`px-4 py-2 border rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${
+                            theme === 'dark' 
+                              ? 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:bg-red-500/20 hover:text-red-500' 
+                              : 'bg-zinc-100 border-zinc-200 text-zinc-600 hover:bg-red-500/10 hover:text-red-500'
+                          }`}
+                        >
+                          Mark Unscanned as Absent
+                        </button>
+                      </div>
+                    )}
                   </div>
                   <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {getDailySummary().map((user) => (
@@ -970,10 +1264,14 @@ export default function App() {
                         theme === 'dark' ? 'bg-zinc-900/50 border-zinc-800' : 'bg-white border-zinc-200 shadow-sm'
                       }`}>
                         <div className="flex items-center gap-4">
-                          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-orange-500 font-bold text-xl ${
+                          <div className={`w-12 h-12 rounded-2xl overflow-hidden flex items-center justify-center text-orange-500 font-bold text-xl ${
                             theme === 'dark' ? 'bg-zinc-800' : 'bg-zinc-100'
                           }`}>
-                            {user.name[0]}
+                            {user.photoUrl ? (
+                              <img src={user.photoUrl} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              user.name[0]
+                            )}
                           </div>
                           <div>
                             <p className={`font-bold ${theme === 'dark' ? 'text-white' : 'text-zinc-900'}`}>{user.name}</p>
